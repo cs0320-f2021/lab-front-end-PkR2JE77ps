@@ -1,3 +1,22 @@
 input[type="number"] {
   width: 3em;
 }
+
+body {
+  display: flex;
+  justify-content: center;
+  background-color: lightcoral;
+}
+
+.flex {
+  padding: 2rem;
+}
+
+.message {
+  color: aliceblue;
+}
+
+#suggestions {
+  color: darkslateblue;
+}
+

@@ -1,12 +1,17 @@
 package edu.brown.cs.student.main;
 
+import com.google.common.collect.ImmutableMap;
 import freemarker.template.Configuration;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import spark.ExceptionHandler;
+import spark.ModelAndView;
+import spark.QueryParamsMap;
 import spark.Request;
 import spark.Response;
+import spark.Spark;
+import spark.TemplateViewRoute;
 import spark.template.freemarker.FreeMarkerEngine;
 
 import java.io.BufferedReader;
@@ -15,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -44,14 +50,11 @@ public final class Main {
 
     OptionParser parser = new OptionParser();
     parser.accepts("gui");
-    parser.accepts("port").withRequiredArg().ofType(Integer.class)
-        .defaultsTo(DEFAULT_PORT);
+    parser.accepts("port").withRequiredArg().ofType(Integer.class).defaultsTo(DEFAULT_PORT);
     parser.accepts("prefix");
     parser.accepts("whitespace");
-    OptionSpec<Integer> ledSpec =
-        parser.accepts("led").withRequiredArg().ofType(Integer.class);
-    OptionSpec<String> dataSpec =
-        parser.accepts("data").withRequiredArg().ofType(String.class);
+    OptionSpec<Integer> ledSpec = parser.accepts("led").withRequiredArg().ofType(Integer.class);
+    OptionSpec<String> dataSpec = parser.accepts("data").withRequiredArg().ofType(String.class);
 
     OptionSet options = parser.parse(args);
     if (options.has("gui")) {
@@ -77,8 +80,7 @@ public final class Main {
       ac = new Autocorrector(files, prefix, whitespace, led);
 
       // For each line of input from user, output autocorrect suggestions.
-      try (BufferedReader br = new BufferedReader(
-          new InputStreamReader(System.in))) {
+      try (BufferedReader br = new BufferedReader(new InputStreamReader(System.in))) {
         String input;
         while ((input = br.readLine()) != null) {
           Set<String> suggestions = ac.suggest(input);
@@ -103,8 +105,7 @@ public final class Main {
     try {
       config.setDirectoryForTemplateLoading(templates);
     } catch (IOException ioe) {
-      System.out.printf("ERROR: Unable use %s for template loading.%n",
-          templates);
+      System.out.printf("ERROR: Unable use %s for template loading.%n", templates);
       System.exit(1);
     }
     return new FreeMarkerEngine(config);
@@ -115,6 +116,12 @@ public final class Main {
    */
   private void runSparkServer(int port) {
     // TODO
+    Spark.port(port);
+    Spark.externalStaticFileLocation("src/main/resources/static");
+    Spark.exception(Exception.class, new ExceptionPrinter());
+    FreeMarkerEngine freeMarker = createEngine();
+    Spark.get("/autocorrect", new AutocorrectHandler(), freeMarker);
+    Spark.post("/results", new SubmitHandler(), freeMarker);
   }
 
   /**
@@ -135,19 +142,43 @@ public final class Main {
   }
 
   /**
-   *  IMPLEMENT AutocorrectHandler HERE
+   * IMPLEMENT AutocorrectHandler HERE
+   * <p>
+   * A handler to produce our autocorrect service site.
    *
-   *  A handler to produce our autocorrect service site.
-   *  @return ModelAndView to render.
-   *  (autocorrect.ftl).
+   * @return ModelAndView to render.
+   * (autocorrect.ftl).
    */
+  private static class AutocorrectHandler implements TemplateViewRoute {
+
+    @Override
+    public ModelAndView handle(Request request, Response response) throws Exception {
+      Map<String, String> variables =
+          ImmutableMap.of("title", "Olympics", "message", "The Olympics are overrated.",
+              "suggestions", "");
+      return new ModelAndView(variables, "autocorrect.ftl");
+    }
+  }
 
   /**
-   *  IMPLEMENT SubmitHandler HERE
+   * IMPLEMENT SubmitHandler HERE
+   * <p>
+   * A handler to print out suggestions once form is submitted.
    *
-   *  A handler to print out suggestions once form is submitted.
-   *  @return ModelAndView to render.
-   *  (autocorrect.ftl).
+   * @return ModelAndView to render.
+   * (autocorrect.ftl).
    */
+  private static class SubmitHandler implements TemplateViewRoute {
+
+    @Override
+    public ModelAndView handle(Request request, Response response) throws Exception {
+      QueryParamsMap qm = request.queryMap();
+      String textFromTextField = qm.value("text");
+      Map<String, String> variables =
+          ImmutableMap.of("title", "Olympics", "message", "The Olympics are overrated.",
+              "suggestions", ac.suggest(textFromTextField).toString());
+      return new ModelAndView(variables, "autocorrect.ftl");
+    }
+  }
 
 }
